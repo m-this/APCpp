@@ -36,21 +36,25 @@ std::vector<int64_t> AP_GetAllLocations() {
     return all_locations;
 }
 
-std::vector<std::pair<int,std::string>> AP_GetAllPlayers() {
-    std::vector<std::pair<int,std::string>> allPlayers;
+std::vector<AP_NetworkPlayer> AP_GetAllPlayers() {
+    std::vector<AP_NetworkPlayer> allPlayers;
 
-    for (int team : teams_set) {
-        for (std::pair<int, AP_NetworkPlayer> player : map_players) {
-            std::pair<int,std::string> teamPlayer = std::pair<int,std::string>(team, player.second.alias);
-
-            allPlayers.push_back(teamPlayer);
-        }
+    for (const std::pair<const int, AP_NetworkPlayer>& player : map_players) {
+        allPlayers.push_back(player.second);
     }
 
     return allPlayers;
 }
 
+std::function<void(std::string)> package_received_external = nullptr;
+void AP_SetPackageReceivedCallback(std::function<void(std::string)> onPackageReceived) {
+    package_received_external = onPackageReceived;
+}
+
 void satisfactory_parse_response(Json::Value& packet, std::string command){
+    if (package_received_external)
+        package_received_external(writer.write(packet));
+
     if (command == "Connected") {
         unsigned int checked_size = packet["checked_locations"].size();
         unsigned int missing_size = packet["missing_locations"].size();
@@ -115,4 +119,8 @@ void AP_EnabledDeathlinkAnyway() {
     std::string request = writer.write(packets);
 
     APSend(request);
+}
+
+void AP_Send(std::string cmd) {
+    APSend(cmd);
 }
