@@ -3,6 +3,7 @@
 #include "ixwebsocket/IXNetSystem.h"
 #include "ixwebsocket/IXWebSocket.h"
 #include "ixwebsocket/IXUserAgent.h"
+#include "ixwebsocket/IXSocketTLSOptions.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -152,6 +153,32 @@ void AP_Init(const char* ip, const char* game, const char* player_name, const ch
 
     //Connect to server
     ix::initNetSystem();
+#ifndef _WIN32
+    // IXWebSocket's mbedtls backend only knows how to read a system trust store on
+    // Windows: everywhere else loadSystemCertificates() returns false, every wss://
+    // handshake fails, and after two retries this falls back to plaintext ws://,
+    // which the Archipelago servers refuse. Point it at the host's CA bundle.
+    {
+        ix::SocketTLSOptions tlsOptions;
+        for (const char* caFile : { "/etc/ssl/certs/ca-certificates.crt",
+                                    "/etc/pki/tls/certs/ca-bundle.crt",
+                                    "/etc/ssl/ca-bundle.pem",
+                                    "/etc/ssl/cert.pem" })
+        {
+            std::ifstream probe(caFile);
+            if (probe.good())
+            {
+                tlsOptions.caFile = caFile;
+                break;
+            }
+        }
+        if (tlsOptions.caFile == "SYSTEM")
+            printf("AP: No CA bundle found, TLS will fail\n");
+        else
+            printf("AP: Using CA bundle %s\n", tlsOptions.caFile.c_str());
+        webSocket.setTLSOptions(tlsOptions);
+    }
+#endif
     webSocket.setUrl("wss://" + ap_ip);
     webSocket.setOnMessageCallback([](const ix::WebSocketMessagePtr& msg)
         {
